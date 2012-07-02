@@ -1,0 +1,292 @@
+#!/usr/bin/php
+<?php
+
+
+error_reporting(E_ERROR);
+
+if (version_compare(PHP_VERSION, '5.0.0', '<')) {
+    define('STDERR', fopen('php://stderr', 'w'));
+}
+
+// argument parsing
+for($i = 1; $i < $argc; $i++) {
+    parse_str($argv[$i]);
+}
+
+parse_commandline();
+
+if($dryrun == 'no') {
+    echo "Dryrun is off. Messages will be copied and folders will be created\n";
+    $dryrun = false;
+} else {
+    echo "Dryrun is on. Nothing will happen on the destination mailbox\n";
+    $dryrun = true;
+}
+
+
+if($tls == 'no') {
+    $sourcestr = "{{$host1}:{$port1}/notls}";
+} else {
+    $sourcestr = "{{$host1}:{$port1}}";
+}
+
+$from = open_connection($sourcestr, $user1, $pass1);
+
+
+if($tls == 'no') {
+    $deststr = "{{$host2}:{$port2}/notls}INBOX{$sep2}";
+} else {
+    $deststr = "{{$host2}:{$port2}}INBOX{$sep2}";
+}
+
+$to = open_connection($deststr, $user2, $pass2);
+
+
+echo "Starting copy process\n";
+
+if(($folders = imap_get_folders($from, $sourcestr)) === false) {
+    fwrite(STDERR, "Unable to fetch list of folders. Unable to continue.\n");
+    fwrite(STDERR, "IMAP errors: " . imap_last_error() . "\n");
+    exit;
+}
+
+foreach(imap_get_folders($from, $sourcestr) as $folder) {
+
+    echo "\n";
+
+    echo "Folder {$folder}: ";
+    if(!imap_reopen($from, $sourcestr . $folder)) {
+        fwrite(STDERR, "failed changing to folder {$folder}! Skipping.\n");
+        fwrite(STDERR, "IMAP errors: " . imap_last_error() . "\n");
+        continue;
+    }
+
+    echo $count = imap_num_msg($from) . " message(s)\n";
+
+    if($count < 1) {
+        echo "\tNo messages found, nothing to do. Skipping.\n";
+        continue;
+    }
+
+    $destfolders = imap_get_folders($to, $deststr);
+
+    echo "\tChecking if " . folder_translate($folder) . " exists on destination: ";
+
+    if(!in_array($folder, $destfolders)) {
+        echo "not found, creating.\n";
+
+        if(!$dryrun) {
+            if(!imap_createmailbox($to, $deststr . folder_translate($folder))) {
+                fwrite(STDERR, "\t\tFailed creating folder. " . $deststr . folder_translate($folder) . " Skipping.\n");
+                fwrite(STDERR, "\t\tIMAP errors: " . imap_last_error() . "\n");
+                echo "Skipping.\n";
+                continue;
+            }
+        }
+
+        echo "\t\tCreated folder\n";
+
+    } else {
+        echo "folder exists.\n";
+    }
+
+    echo "\tCopying messages\n";
+
+    if(!imap_reopen($to, $deststr . folder_translate($folder))) {
+        fwrite(STDERR, "\tFailed opening folder. Skipping.\n");
+        fwrite(STDERR, "\tIMAP errors: " . imap_last_error() . "\n");
+        continue;
+    }
+
+    $i = 1;
+    while($i <= $count) {
+        imap_copy_message($from, $to, $deststr . folder_translate($folder), $i);
+        $i++;
+    }
+}
+
+/**
+* Copy message nr. i from source to destination.
+*/
+function imap_copy_message($source, $destination, $destmailbox, $i) {
+    global $dryrun;
+
+    echo "\t\t#{$i}, ";
+
+    if(!$headers = imap_headerinfo($source, $i)) {
+        echo "no such message with number {$i}, skipping.\n";
+        return;
+    }
+
+    echo "{$headers->message_id}: ";
+
+    if(($ids = imap_get_messageids($destination)) === false) {
+        fwrite(STDERR, "\n");
+        fwrite(STDERR, "\t\t\tFailed retrieving message ID's. Skipping.\n");
+        fwrite(STDERR, "\t\t\tIMAP errors: " . imap_last_error() . "\n");
+        return;
+    }
+
+    if(in_array($headers->message_id, $ids)) {
+        echo "destination already has it, skipping\n";
+        return;
+    }
+
+    if(!$body = imap_fetchbody($source, $i, null, FT_PEEK)) {
+        fwrite(STDERR, "\n");
+        fwrite(STDERR, "\t\t\tfailed fetching message body! Skipping.\n");
+        fwrite(STDERR, "\t\t\tIMAP errors: " . imap_last_error() . "\n");
+        return;
+    }
+
+    $flags = imap_calculate_flags($headers);
+    if(!$dryrun) {
+        if(!imap_append($destination, $destmailbox, $body, $flags)) {
+            fwrite(STDERR, "\n");
+            fwrite(STDERR, "\t\t\tfailed writing message body! Skipping.\n");
+            fwrite(STDERR, "\t\t\tIMAP errors: " . imap_last_error() . "\n");
+        }
+    }
+
+    echo "completed. (flags: {$flags})\n";
+}
+
+function imap_calculate_flags($headers) {
+    $flags = "";
+
+    if($headers->Recent == 'R') {
+        $flags .= '\Seen ';
+    } elseif($headers->Recent == ' ' && $headers->Unseen == ' ') {
+        $flags .= '\Seen ';
+    }
+
+    if($headers->Flagged == 'F') {
+        $flags .= '\Flagged ';
+    }
+
+    if($headers->Draft == 'X') {
+        $flags .= '\Draft ';
+    }
+
+    if($headers->Deleted == 'D') {
+        $flags .= '\Deleted ';
+    }
+
+    if($headers->Answered == 'A') {
+        $flags .= '\Answered ';
+    }
+
+    return $flags;
+}
+
+function open_connection($connstr, $user, $pass) {
+    echo "Opening connection to '{$user}'@$connstr\n";
+    if(!$conn = imap_open($connstr, $user, $pass)) {
+        fwrite(STDERR, "Failed opening connection to {$connstr}. ");
+        fwrite(STDERR, "Unable to continue.\n");
+        fwrite(STDERR, "IMAP errors: " . imap_last_error() . "\n");
+        exit();
+    }
+    echo "Connection established to '{$user}'@$connstr\n";
+    return $conn;
+}
+
+
+function imap_get_folders($stream, $ref) {
+
+    if(!$folders = imap_list($stream, $ref, '*')) {
+        return false;
+    }
+
+    $result = array();
+
+    foreach($folders as $folder) {
+        $result[] = str_replace($ref, null, $folder);
+    }
+
+    return $result;
+}
+
+function imap_get_messageids($stream) {
+    $i = 1;
+
+    if(($count = imap_num_msg($stream)) === false) {
+        return false;
+    }
+    
+    while($i <= $count) {
+        if(($headers = imap_headerinfo($stream, $i)) === false) {
+            return false;
+        }
+        $ids[] = $headers->message_id;
+        $i++;
+    }
+    return $ids;
+}
+
+function folder_translate($source) {
+    global $sep1, $sep2;
+    return str_replace($sep1, $sep2, $source);
+}
+
+function parse_commandline() {
+
+    $mandatory    = array('host1', 'host2', 'user1', 'user2', 'pass1', 'pass2');
+
+    $optional    = array(
+        'port1'    => 143,
+        'port2'    => 143,
+        'dryrun' => 'yes',
+        'tls' => 'yes',
+        'sep1' => '.',
+        'sep2' => '.'
+    );
+
+    foreach($mandatory as $var) {
+        global $$var;
+        if(@!$$var) {
+            write_error_exit("{$var} not specified.");
+        }
+    }
+
+    foreach($optional as $var => $default) {
+        global $$var;
+        if(@!$$var) {
+            $$var = $default;
+        }
+    }
+}
+
+function write_error_exit($error) {
+    fwrite(STDERR, $error . "\n");
+    help();
+    exit();
+}
+
+function help() {
+    global $argv;
+    echo "
+usage: {$argv[0]} host1= user1= pass1= host2= user2= pass2= [options]
+
+Arguments
+----------
+host1       Host to copy from
+user1       User to copy from
+pass1       Password to use
+
+host2       Host to copy to
+user2       User to copy to
+pass2       Password to use
+
+Options
+---------
+dryrun      Do everything as normal but do not write to the destination box.
+            Possible values: yes or no. [default: yes]
+tls         Do not attempt to use TLS when connecting to the mailboxes.
+            Possible values: yes or no. [default: yes]
+sep1        Folder seperator on host1. [default: .]
+sep2        Folder seperator on host2. [default: .]
+port1       Port to use for host1. [default: 143]
+port2       Port to use for host2. [default: 143]
+";
+}
