@@ -83,7 +83,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
                 continue;
             }
             else {
-                echo "subscribing to folder on destination.\n";
+                echo "\tSubscribing to folder on destination.\n";
                 imap_subscribe($to, $deststr . folder_translate($folder));
             }
         }
