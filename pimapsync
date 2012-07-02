@@ -82,6 +82,10 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
                 echo "Skipping.\n";
                 continue;
             }
+            else {
+                echo "subscribing to folder on destination.\n";
+                imap_subscribe($to, $deststr . folder_translate($folder));
+            }
         }
 
         echo "\t\tCreated folder\n";
