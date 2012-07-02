@@ -51,6 +51,12 @@ if(($folders = imap_get_folders($from, $sourcestr)) === false) {
     exit;
 }
 
+$toskip = array();
+if (strlen($skip)) {
+    $skip = strtolower($skip);
+    $toskip = explode("|", $skip);
+}
+
 foreach(imap_get_folders($from, $sourcestr) as $folder) {
 
     echo "\n";
@@ -62,6 +68,13 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
     }
 
     echo "Folder {$folder}: ";
+
+    if (in_array(strtolower($folder), $toskip)) {
+        echo "set to skip.\n";
+        continue;
+    }
+
+
     if(!imap_reopen($from, $sourcestr . $folder)) {
         fwrite(STDERR, "failed changing to folder {$folder}! Skipping.\n");
         fwrite(STDERR, "IMAP errors: " . imap_last_error() . "\n");
@@ -252,7 +265,8 @@ function parse_commandline() {
         'sep1' => '.',
         'sep2' => '.',
         'pref1' => '',
-        'pref2' => 'INBOX'
+        'pref2' => 'INBOX',
+        'skip' => array()
 
     );
 
@@ -296,6 +310,8 @@ Options
 ---------
 dryrun      Do everything as normal but do not write to the destination box.
             Possible values: yes or no. [default: yes]
+skip        List of mailboxes to skip separated by pipe. This is case insentive
+            Example skip=junk|trash
 tls         Do not attempt to use TLS when connecting to the mailboxes.
             Possible values: yes or no. [default: yes]
 sep1        Folder seperator on host1. [default: .]
