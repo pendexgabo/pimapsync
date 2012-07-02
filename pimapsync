@@ -75,7 +75,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
         continue;
     }
 
-    $destfolders = imap_get_folders($to, $deststr);
+    $destfolders = imap_get_folders($to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : ""));
 
     echo "\tChecking if " . folder_translate($folder) . " exists on destination: ";
 
