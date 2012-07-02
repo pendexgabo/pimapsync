@@ -1,12 +1,13 @@
 #!/usr/bin/php
 <?php
 
-
 error_reporting(E_ERROR);
 
 if (version_compare(PHP_VERSION, '5.0.0', '<')) {
     define('STDERR', fopen('php://stderr', 'w'));
 }
+
+define('INBOX', 'INBOX');
 
 // argument parsing
 for($i = 1; $i < $argc; $i++) {
@@ -34,9 +35,9 @@ $from = open_connection($sourcestr, $user1, $pass1);
 
 
 if($tls == 'no') {
-    $deststr = "{{$host2}:{$port2}/notls}INBOX{$sep2}";
+    $deststr = "{{$host2}:{$port2}/notls}";
 } else {
-    $deststr = "{{$host2}:{$port2}}INBOX{$sep2}";
+    $deststr = "{{$host2}:{$port2}}";
 }
 
 $to = open_connection($deststr, $user2, $pass2);
@@ -53,6 +54,10 @@ if(($folders = imap_get_folders($from, $sourcestr)) === false) {
 foreach(imap_get_folders($from, $sourcestr) as $folder) {
 
     echo "\n";
+
+    if ($folder != INBOX) {
+        $addprefix = true;
+    }
 
     echo "Folder {$folder}: ";
     if(!imap_reopen($from, $sourcestr . $folder)) {
@@ -76,7 +81,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
         echo "not found, creating.\n";
 
         if(!$dryrun) {
-            if(!imap_createmailbox($to, $deststr . folder_translate($folder))) {
+            if(!imap_createmailbox($to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : "") . folder_translate($folder))) {
                 fwrite(STDERR, "\t\tFailed creating folder. " . $deststr . folder_translate($folder) . " Skipping.\n");
                 fwrite(STDERR, "\t\tIMAP errors: " . imap_last_error() . "\n");
                 echo "Skipping.\n";
@@ -84,7 +89,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
             }
             else {
                 echo "\tSubscribing to folder on destination.\n";
-                imap_subscribe($to, $deststr . folder_translate($folder));
+                imap_subscribe($to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : "") . folder_translate($folder));
             }
         }
 
@@ -96,7 +101,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
 
     echo "\tCopying messages\n";
 
-    if(!imap_reopen($to, $deststr . folder_translate($folder))) {
+    if(!imap_reopen($to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : "") . folder_translate($folder))) {
         fwrite(STDERR, "\tFailed opening folder. Skipping.\n");
         fwrite(STDERR, "\tIMAP errors: " . imap_last_error() . "\n");
         continue;
@@ -243,7 +248,10 @@ function parse_commandline() {
         'dryrun' => 'yes',
         'tls' => 'yes',
         'sep1' => '.',
-        'sep2' => '.'
+        'sep2' => '.',
+        'pref1' => '',
+        'pref2' => 'INBOX'
+
     );
 
     foreach($mandatory as $var) {
@@ -292,5 +300,7 @@ sep1        Folder seperator on host1. [default: .]
 sep2        Folder seperator on host2. [default: .]
 port1       Port to use for host1. [default: 143]
 port2       Port to use for host2. [default: 143]
+pref1       Prefix to use for host2. [default: <empty>]
+pref2       Prefix to use for host2. [default: INBOX]
 ";
 }
