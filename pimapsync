@@ -62,7 +62,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
     }
 
     echo "Folder {$folder}: ";
-    if(!imap_reopen($from, $sourcestr . ($addprefix ? "{$pref2}{$sep2}" : "") . $folder)) {
+    if(!imap_reopen($from, $sourcestr . $folder)) {
         fwrite(STDERR, "failed changing to folder {$folder}! Skipping.\n");
         fwrite(STDERR, "IMAP errors: " . imap_last_error() . "\n");
         continue;
