@@ -55,6 +55,8 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
 
     echo "\n";
 
+    // back to original state
+    $addprefix = false;
     if ($folder != INBOX) {
         $addprefix = true;
     }
