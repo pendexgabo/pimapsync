@@ -10,7 +10,7 @@ It is not meant to be used as a synchronization tool but rather as a one time mi
 ## Dependencies
 
 
-[PHP imap extesion](http://www.php.net/manual/es/ref.imap.php)
+[PHP imap extension](http://www.php.net/manual/es/ref.imap.php)
 
 
 ## Usage
