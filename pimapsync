@@ -124,7 +124,7 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
 
     $i = 1;
     while($i <= $count) {
-        imap_copy_message($from, $to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : "") . folder_translate($folder), $i);
+        imap_copy_message($from, $to, $deststr . ($addprefix ? "{$pref2}{$sep2}" : "") . folder_translate($folder), $i, ($count + 1));
         $i++;
     }
 }
@@ -132,10 +132,10 @@ foreach(imap_get_folders($from, $sourcestr) as $folder) {
 /**
 * Copy message nr. i from source to destination.
 */
-function imap_copy_message($source, $destination, $destmailbox, $i) {
+function imap_copy_message($source, $destination, $destmailbox, $i, $total) {
     global $dryrun;
 
-    echo "\t\t#{$i}, ";
+    echo "\t\t#{$i}/{$total}, ";
 
     if(!$headers = imap_headerinfo($source, $i)) {
         echo "no such message with number {$i}, skipping.\n";
